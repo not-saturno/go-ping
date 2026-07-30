@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/not-saturno/go-ping/internal/network"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 )
@@ -20,11 +21,7 @@ func main() {
 
 	destination := flag.Arg(0)
 
-	ipAddr, err := net.LookupIP(destination)
-
-	if err != nil {
-		log.Fatalf("GO-PING Name or service not found.")
-	}
+	ipAddr := network.LookupDomain(destination)
 
 	conn, err := icmp.ListenPacket("udp4", "0.0.0.0")
 	if err != nil {
@@ -42,10 +39,10 @@ func main() {
 	}
 
 	bytes, err := msg.Marshal(nil)
-	dstAddr := &net.UDPAddr{IP: ipAddr[0], Port: 0}
+	dstAddr := &net.UDPAddr{IP: ipAddr, Port: 0}
 
 	nSent, err := conn.WriteTo(bytes, dstAddr)
-	fmt.Printf("GO-PING Sent %d bytes to %s (%s)\n", nSent, destination, ipAddr[0].String())
+	fmt.Printf("GO-PING Sent %d bytes to %s (%s)\n", nSent, destination, ipAddr.String())
 
 	reply := make([]byte, 1500)
 	nRead, peer, err := conn.ReadFrom(reply)

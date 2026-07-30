@@ -1,0 +1,3 @@
+
+# Ignore all Go test files anywhere in the project
+*_test.go
