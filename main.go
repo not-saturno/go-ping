@@ -4,14 +4,14 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
-	"os"
+	"time"
 
-	"golang.org/x/net/icmp"
-	"golang.org/x/net/ipv4"
+	"github.com/not-saturno/go-ping/internal/network"
 )
 
 func main() {
+	count := flag.Int("c", 1, "Amount of pings to be sent until the end of the program.")
+
 	flag.Parse()
 
 	if flag.NArg() < 1 {
@@ -20,55 +20,39 @@ func main() {
 
 	destination := flag.Arg(0)
 
-	ipAddr, err := net.LookupIP(destination)
+	ipAddress, err := network.LookupDomain(destination)
 
 	if err != nil {
-		log.Fatalf("GO-PING Name or service not found.")
+		log.Fatalf("%s", err.Error())
 	}
 
-	conn, err := icmp.ListenPacket("udp4", "0.0.0.0")
+	pinger, err := network.Listen()
+
 	if err != nil {
-		log.Fatalf("GO-PING Listen error: %v", err)
+		log.Fatalf("GO-PING: Failure starting connection. %v\n", err)
 	}
 
-	defer conn.Close()
+	defer pinger.Close()
 
-	msg := icmp.Message{
-		Type: ipv4.ICMPTypeEcho, Code: 0,
-		Body: &icmp.Echo{
-			ID: os.Getpid() & 0xffff, Seq: 1,
-			Data: []byte("HELLO-R-U-THERE"),
-		},
-	}
+	pinger.SetupUDPAddress(ipAddress)
 
-	bytes, err := msg.Marshal(nil)
-	dstAddr := &net.UDPAddr{IP: ipAddr[0], Port: 0}
+	for range *count {
+		nSent, err := pinger.SendMessage()
 
-	nSent, err := conn.WriteTo(bytes, dstAddr)
-	fmt.Printf("GO-PING Sent %d bytes to %s (%s)\n", nSent, destination, ipAddr[0].String())
-
-	reply := make([]byte, 1500)
-	nRead, peer, err := conn.ReadFrom(reply)
-	if err != nil {
-		log.Fatalf("GO-PING Read error, %v", err)
-	}
-
-	parsedMsg, err := icmp.ParseMessage(1, reply[:nRead])
-	if err != nil {
-		log.Fatalf("GO-PING Parse error, %v", err)
-	}
-
-	switch parsedMsg.Type {
-	case ipv4.ICMPTypeEchoReply:
-		echoReply, ok := parsedMsg.Body.(*icmp.Echo)
-		if !ok {
-			log.Fatalf("GO-PING invalid ICMP echo body format")
+		if err != nil {
+			log.Fatalf("GO-PING: Failure writing message to %s (%s)\n", destination, ipAddress.String())
 		}
-		fmt.Printf("Reply from %s (%s): seq=%d bytes=%d", destination,
-			peer, echoReply.Seq, nRead)
 
-	default:
-		fmt.Printf("GO-PING Got non-echo ICMP message type: %v\n", parsedMsg.Type)
+		fmt.Printf("GO-PING: Sent %d bytes to %s (%s)\n", nSent, destination, ipAddress.String())
+
+		replyMessage, err := pinger.ReadReply()
+
+		if err != nil {
+			log.Fatalf("GO-PING: %v", err)
+		}
+
+		fmt.Println(replyMessage)
+		time.Sleep(1 * time.Second)
 	}
 
 }
